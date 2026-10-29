@@ -7,6 +7,7 @@ import { Button } from '../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Progress } from '../components/ui/progress'
 import { api } from '../lib/api'
+import { confidenceLabel } from '../lib/confidence'
 
 export function DetectorPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -77,8 +78,12 @@ export function DetectorPage() {
       setForensicsReport(forensicResponse)
       setUploadProgress(100)
       const scoreValue = response.score != null ? Number(response.score) : 0
-      const scorePercent = Math.min(100, Math.max(0, Math.round(scoreValue * 100)))
-      setResultMessage(`Prediction: ${response.prediction ?? 'unknown'} (${scorePercent}%)`)
+      const prediction = response.prediction === 'ai_generated' ? 'AI-generated' : response.prediction === 'authentic' ? 'Real' : 'Inconclusive'
+      setResultMessage(
+        scoreValue >= 0.5 && prediction !== 'Inconclusive'
+          ? `Prediction: ${prediction} · Confidence: ${confidenceLabel(scoreValue)}`
+          : `Prediction: Inconclusive · Confidence: ${confidenceLabel(scoreValue)}`,
+      )
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : 'Unable to analyze image.')
       setUploadProgress(0)

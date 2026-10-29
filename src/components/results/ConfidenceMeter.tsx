@@ -1,5 +1,7 @@
 import { motion } from 'framer-motion'
 
+import { confidenceLabel } from '../../lib/confidence'
+
 export function ConfidenceMeter({
   value,
   label = 'Confidence',
@@ -20,7 +22,7 @@ export function ConfidenceMeter({
       <div className="flex items-center justify-between gap-3 text-sm">
         <span className="font-medium text-slate-200">{label}</span>
         <div className="flex items-center gap-2">
-          <span className="text-lg font-semibold text-white">{percent}%</span>
+          <span className="text-lg font-semibold text-white">{confidenceLabel(value)} confidence</span>
         </div>
       </div>
 

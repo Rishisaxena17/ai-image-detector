@@ -1,6 +1,7 @@
 import { ArrowUpRight, Filter, Search } from 'lucide-react'
 
 import { sampleHistory } from '../../data/demo'
+import { confidenceLabel } from '../../lib/confidence'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
 
@@ -35,6 +36,7 @@ export function HistoryTable() {
               <th className="pb-3 font-medium">Case</th>
               <th className="pb-3 font-medium">Status</th>
               <th className="pb-3 font-medium">Prediction</th>
+              <th className="pb-3 font-medium">Result</th>
               <th className="pb-3 font-medium">Confidence</th>
               <th className="pb-3 font-medium">Date</th>
             </tr>
@@ -52,7 +54,12 @@ export function HistoryTable() {
                 <td className="py-3 pr-4">
                   <span className="capitalize">{record.label.replace('_', ' ')}</span>
                 </td>
-                <td className="py-3 pr-4">{Math.round(record.confidence * 100)}%</td>
+                <td className="py-3 pr-4">
+                  {record.confidence >= 0.5 && record.label !== 'uncertain'
+                    ? record.label === 'ai_generated' ? 'AI-generated' : 'Real'
+                    : 'Inconclusive'}
+                </td>
+                <td className="py-3 pr-4">{confidenceLabel(record.confidence)}</td>
                 <td className="py-3 pr-4 text-slate-400">
                   {new Date(record.createdAt).toLocaleDateString()}
                 </td>
