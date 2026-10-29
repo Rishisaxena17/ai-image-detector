@@ -29,6 +29,28 @@ backend/*.db
 backend/uploads/*
 !backend/uploads/.gitkeep
 ai-generated-*.jpg
+model_training/dataset/*
+!model_training/dataset/train/
+!model_training/dataset/val/
+!model_training/dataset/test/
+model_training/dataset/train/*
+model_training/dataset/val/*
+model_training/dataset/test/*
+!model_training/dataset/train/real/
+!model_training/dataset/train/ai/
+!model_training/dataset/val/real/
+!model_training/dataset/val/ai/
+!model_training/dataset/test/real/
+!model_training/dataset/test/ai/
+model_training/dataset/train/real/*
+model_training/dataset/train/ai/*
+model_training/dataset/val/real/*
+model_training/dataset/val/ai/*
+model_training/dataset/test/real/*
+model_training/dataset/test/ai/*
+!model_training/dataset/**/.gitkeep
+model_training/artifacts/*
+!model_training/artifacts/.gitkeep
 
 # Editor directories and files
 .vscode/*

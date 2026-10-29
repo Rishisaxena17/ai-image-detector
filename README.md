@@ -176,6 +176,37 @@ If the model exceeds free-tier limits, move the backend to a small CPU-optimized
 
 ## Academic documentation
 
+## Training a project-specific detector
+
+The optional `model_training/` pipeline trains a logistic-regression classifier on
+normalized CLIP image features. Keep the dataset and generated artifacts local:
+
+```text
+model_training/dataset/
+├── train/{real,ai}/
+├── val/{real,ai}/
+└── test/{real,ai}/
+```
+
+Install its dependencies in a dedicated environment, then train:
+
+```bash
+python -m pip install -r model_training/requirements.txt
+python model_training/train.py --dataset model_training/dataset
+python model_training/predict.py /path/to/test-image.jpg
+```
+
+The training script selects the classification threshold on the validation split
+and reports validation/test accuracy, precision, recall, F1, ROC-AUC, and a
+confusion matrix. The test split must remain untouched until final evaluation.
+Avoid duplicates across splits and reserve generators or image transformations
+for an unseen generalization test.
+
+To use the resulting detector in the FastAPI backend, set
+`TRAINED_ARTIFACT_DIR` in `backend/.env` to the generated `model_training/artifacts`
+directory and restart the backend. The existing detector remains the default when
+this setting is empty.
+
 Additional documentation is available in the `docs/` folder:
 
 - `docs/architecture.md`

@@ -9,6 +9,7 @@ PROJECT_ROOT = ROOT_DIR.parent
 MODEL_ID = os.getenv('MODEL_ID', 'aaronkantrowitz/ai-human-generated-image-detection')
 MODEL_CACHE_DIR = os.getenv('MODEL_CACHE_DIR', str(PROJECT_ROOT / '.hf_cache'))
 MODEL_DEVICE = os.getenv('MODEL_DEVICE', 'cpu')
+TRAINED_ARTIFACT_DIR = os.getenv('TRAINED_ARTIFACT_DIR', '')
 MAX_IMAGE_SIZE_MB = int(os.getenv('MAX_IMAGE_SIZE_MB', '10'))
 MAX_IMAGE_DIMENSION = int(os.getenv('MAX_IMAGE_DIMENSION', '4096'))
 ALLOWED_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp'}

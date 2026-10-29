@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import math
 import os
 import time
@@ -9,9 +10,10 @@ from pathlib import Path
 from typing import Any
 
 import torch
+import joblib
 from fastapi import UploadFile
 from PIL import Image, UnidentifiedImageError
-from transformers import AutoImageProcessor, AutoModelForImageClassification
+from transformers import AutoImageProcessor, AutoModelForImageClassification, AutoProcessor, CLIPModel
 
 from app.config import (
     ALLOWED_EXTENSIONS,
@@ -21,6 +23,7 @@ from app.config import (
     MODEL_CACHE_DIR,
     MODEL_DEVICE,
     MODEL_ID,
+    TRAINED_ARTIFACT_DIR,
 )
 
 
@@ -61,12 +64,20 @@ class ModelService:
         self.device = torch.device(MODEL_DEVICE if MODEL_DEVICE else 'cpu')
         self.processor: AutoImageProcessor | None = None
         self.model: AutoModelForImageClassification | None = None
+        self.trained_encoder: CLIPModel | None = None
+        self.trained_classifier: Any | None = None
+        self.trained_threshold: float | None = None
+        self.trained_uncertainty_band = 0.05
+        self.trained_config: dict[str, Any] | None = None
         self._ready = False
         self._load_error: str | None = None
 
     @property
     def is_ready(self) -> bool:
-        return self._ready and self.model is not None and self.processor is not None
+        return self._ready and self.processor is not None and (
+            self.model is not None
+            or self.trained_encoder is not None and self.trained_classifier is not None
+        )
 
     def _ensure_cache_dir(self) -> None:
         Path(self.cache_dir).mkdir(parents=True, exist_ok=True)
@@ -77,6 +88,12 @@ class ModelService:
 
         try:
             self._ensure_cache_dir()
+            if TRAINED_ARTIFACT_DIR:
+                self._load_trained_artifacts(Path(TRAINED_ARTIFACT_DIR))
+                self._ready = True
+                self._load_error = None
+                return
+
             self.processor = AutoImageProcessor.from_pretrained(
                 self.model_id,
                 cache_dir=self.cache_dir,
@@ -96,13 +113,51 @@ class ModelService:
             self._load_error = str(exc)
             raise ModelInferenceError(f'Failed to load model {self.model_id}: {exc}') from exc
 
+    def _load_trained_artifacts(self, artifact_dir: Path) -> None:
+        config_path = artifact_dir / 'config.json'
+        classifier_path = artifact_dir / 'classifier.joblib'
+        if not config_path.is_file() or not classifier_path.is_file():
+            raise ModelInferenceError(
+                f'Trained detector artifacts are incomplete in {artifact_dir}; '
+                'expected config.json and classifier.joblib.'
+            )
+
+        try:
+            config = json.loads(config_path.read_text())
+            encoder_id = str(config['model_id'])
+            threshold = float(config['threshold'])
+            if not 0.0 < threshold < 1.0:
+                raise ValueError('threshold must be between 0 and 1')
+            self.processor = AutoProcessor.from_pretrained(
+                encoder_id,
+                cache_dir=self.cache_dir,
+                local_files_only=False,
+            )
+            self.trained_encoder = CLIPModel.from_pretrained(
+                encoder_id,
+                cache_dir=self.cache_dir,
+                local_files_only=False,
+            ).to(self.device)
+            self.trained_encoder.eval()
+            self.trained_classifier = joblib.load(classifier_path)
+            self.trained_threshold = threshold
+            self.trained_uncertainty_band = float(config.get('uncertainty_band', 0.05))
+            self.trained_config = config
+            self.model_id = f'{encoder_id}+logistic-regression'
+        except (KeyError, OSError, TypeError, ValueError, RuntimeError) as exc:
+            raise ModelInferenceError(f'Failed to load trained detector artifacts: {exc}') from exc
+
     def status(self) -> dict[str, Any]:
         return {
             'model_id': self.model_id,
             'ready': self.is_ready,
             'device': str(self.device),
             'cache_dir': self.cache_dir,
-            'labels': list(getattr(self.model.config, 'id2label', {}).values()) if self.model else [],
+            'labels': (
+                ['authentic', 'ai_generated']
+                if self.trained_classifier is not None
+                else list(getattr(self.model.config, 'id2label', {}).values()) if self.model else []
+            ),
             'load_error': self._load_error,
         }
 
@@ -171,6 +226,34 @@ class ModelService:
         self.load()
 
         inputs = self.preprocess_image(image_bytes)
+        if self.trained_encoder is not None and self.trained_classifier is not None:
+            with torch.inference_mode():
+                features = self.trained_encoder.get_image_features(
+                    pixel_values=inputs['pixel_values']
+                )
+                features = torch.nn.functional.normalize(features, dim=-1).cpu().numpy()
+            ai_score = float(self.trained_classifier.predict_proba(features)[0, 1])
+            threshold = self.trained_threshold or 0.5
+            normalized_label = 'ai_generated' if ai_score >= threshold else 'authentic'
+            confidence = ai_score if normalized_label == 'ai_generated' else 1.0 - ai_score
+            is_inconclusive = abs(ai_score - threshold) < self.trained_uncertainty_band
+            processing_time_ms = int((time.perf_counter() - start) * 1000)
+            return PredictionResult(
+                prediction_label=normalized_label,
+                score=float(confidence),
+                model_id=self.model_id,
+                labels=[
+                    {'label': 'authentic', 'score': float(1.0 - ai_score)},
+                    {'label': 'ai_generated', 'score': ai_score},
+                ],
+                processing_time_ms=processing_time_ms,
+                is_inconclusive=is_inconclusive,
+                limitation_notice=(
+                    'This score is the trained classifier output and is not a verified probability. '
+                    'It is intended for triage and may perform differently on unseen generators or image edits.'
+                ),
+            )
+
         with torch.inference_mode():
             outputs = self.model(**inputs)
         logits = outputs.logits[0]
