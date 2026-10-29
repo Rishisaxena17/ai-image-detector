@@ -14,7 +14,7 @@ from app.database import get_db
 from app.models import Analysis, User
 from app.schemas import AnalysisListResponse, AnalysisOut
 from app.security import get_optional_current_user
-from app.services.model_service import ModelInferenceError, ModelService
+from app.services.model_service import ModelInferenceError, ModelService, get_model_service
 
 router = APIRouter(prefix='/api/v1', tags=['analysis'])
 
@@ -75,7 +75,7 @@ async def analyze_image(
     if '..' in safe_name or '/' in safe_name or '\\' in safe_name:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid file name.')
 
-    model = ModelService()
+    model = get_model_service()
     try:
         prediction = model.predict(contents)
     except (ModelInferenceError, RuntimeError, ValueError) as exc:
@@ -167,10 +167,10 @@ def delete_analysis(
 
 @router.get('/health')
 def health() -> dict:
-    return {'status': 'ok', 'service': 'veritas-ai-backend', 'model_ready': ModelService().is_ready}
+    return {'status': 'ok', 'service': 'veritas-ai-backend', 'model_ready': get_model_service().is_ready}
 
 
 @router.get('/model/status')
 def model_status() -> dict:
-    service = ModelService()
+    service = get_model_service()
     return service.status()

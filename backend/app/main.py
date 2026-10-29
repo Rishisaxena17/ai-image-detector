@@ -5,9 +5,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.analysis_routes import router as analysis_router
 from app.auth_routes import router as auth_router
-from app.config import CORS_ORIGINS, MODEL_ID
+from app.config import CORS_ORIGINS, MODEL_ID, TRAINED_ARTIFACT_DIR
 from app.database import init_db
 from app.forensics_routes import router as forensics_router
+from app.services.model_service import get_model_service
 
 app = FastAPI(
     title='VERITAS AI Inference API',
@@ -31,6 +32,8 @@ app.include_router(forensics_router)
 @app.on_event('startup')
 def startup_event() -> None:
     init_db()
+    if TRAINED_ARTIFACT_DIR:
+        get_model_service().load()
 
 
 @app.get('/')

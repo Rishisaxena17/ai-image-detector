@@ -7,18 +7,13 @@ from app.services.model_service import (
     InvalidImageError,
     ModelInferenceError,
     ModelService,
+    get_model_service as get_shared_model_service,
     UnsupportedFormatError,
 )
 
 router = APIRouter(tags=['inference'])
-_service: ModelService | None = None
-
-
 def get_model_service() -> ModelService:
-    global _service
-    if _service is None:
-        _service = ModelService()
-    return _service
+    return get_shared_model_service()
 
 
 @router.post('/infer')

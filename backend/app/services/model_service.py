@@ -4,6 +4,7 @@ import io
 import json
 import math
 import os
+import threading
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -71,6 +72,7 @@ class ModelService:
         self.trained_config: dict[str, Any] | None = None
         self._ready = False
         self._load_error: str | None = None
+        self._load_lock = threading.Lock()
 
     @property
     def is_ready(self) -> bool:
@@ -86,32 +88,35 @@ class ModelService:
         if self.is_ready:
             return
 
-        try:
-            self._ensure_cache_dir()
-            if TRAINED_ARTIFACT_DIR:
-                self._load_trained_artifacts(Path(TRAINED_ARTIFACT_DIR))
+        with self._load_lock:
+            if self.is_ready:
+                return
+            try:
+                self._ensure_cache_dir()
+                if TRAINED_ARTIFACT_DIR:
+                    self._load_trained_artifacts(Path(TRAINED_ARTIFACT_DIR))
+                    self._ready = True
+                    self._load_error = None
+                    return
+
+                self.processor = AutoImageProcessor.from_pretrained(
+                    self.model_id,
+                    cache_dir=self.cache_dir,
+                    local_files_only=False,
+                )
+                self.model = AutoModelForImageClassification.from_pretrained(
+                    self.model_id,
+                    cache_dir=self.cache_dir,
+                    local_files_only=False,
+                )
+                self.model.to(self.device)
+                self.model.eval()
                 self._ready = True
                 self._load_error = None
-                return
-
-            self.processor = AutoImageProcessor.from_pretrained(
-                self.model_id,
-                cache_dir=self.cache_dir,
-                local_files_only=False,
-            )
-            self.model = AutoModelForImageClassification.from_pretrained(
-                self.model_id,
-                cache_dir=self.cache_dir,
-                local_files_only=False,
-            )
-            self.model.to(self.device)
-            self.model.eval()
-            self._ready = True
-            self._load_error = None
-        except Exception as exc:  # pragma: no cover - actual load errors are exercised in tests via mocked loader calls
-            self._ready = False
-            self._load_error = str(exc)
-            raise ModelInferenceError(f'Failed to load model {self.model_id}: {exc}') from exc
+            except Exception as exc:  # pragma: no cover - actual load errors are exercised in tests via mocked loader calls
+                self._ready = False
+                self._load_error = str(exc)
+                raise ModelInferenceError(f'Failed to load model {self.model_id}: {exc}') from exc
 
     def _load_trained_artifacts(self, artifact_dir: Path) -> None:
         config_path = artifact_dir / 'config.json'
@@ -304,3 +309,7 @@ class ModelService:
 
 
 _model_service = ModelService()
+
+
+def get_model_service() -> ModelService:
+    return _model_service

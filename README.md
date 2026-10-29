@@ -179,7 +179,8 @@ If the model exceeds free-tier limits, move the backend to a small CPU-optimized
 ## Training a project-specific detector
 
 The optional `model_training/` pipeline trains a logistic-regression classifier on
-normalized CLIP image features. Keep the dataset and generated artifacts local:
+normalized CLIP ViT-L/14 image features. Keep the dataset and generated artifacts
+local:
 
 ```text
 model_training/dataset/
